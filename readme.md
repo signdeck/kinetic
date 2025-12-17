@@ -6,13 +6,15 @@ Use to be able to share props based on the Inertia component name.
 
 [![Tests](https://github.com/ambengers/kinetic/actions/workflows/tests.yml/badge.svg)](https://github.com/ambengers/kinetic/actions/workflows/tests.yml)
 
+> **Note:** The package automatically uses Inertia.js 3.x on PHP 8.4+ and Inertia.js 2.x on older PHP versions.
+
 ## Versions
 
-| InertiaJS    | Kinetic |
-|--------------|---------|
-| ^3.0         | ^3.0    |
-| ^2.0         | ^2.0    |
-| ~0.5 to ^1.0 | 1.9     |
+| InertiaJS    | Kinetic | PHP Requirement |
+|--------------|---------|-----------------|
+| ^3.0         | ^3.0    | PHP 8.4+        |
+| ^2.0         | ^2.0    | PHP 8.0+        |
+| ~0.5 to ^1.0 | 1.9     | PHP 7.3+        |
 
 > "This package was created and maintained by the team behind [SignDeck — a lightweight e-signature platform for collecting documents and signatures.](https://getsigndeck.com)"
 
