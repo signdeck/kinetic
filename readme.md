@@ -14,6 +14,8 @@ Use to be able to share props based on the Inertia component name.
 | ^2.0         | ^2.0    |
 | ~0.5 to ^1.0 | 1.9     |
 
+> "This package was created and maintained by the team behind [SignDeck — a lightweight e-signature platform for collecting documents and signatures.](https://getsigndeck.com)"
+
 ## Installation
 
 ```sh
