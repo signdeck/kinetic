@@ -4,6 +4,8 @@ A package that adds view-composer like feature to Inertia.js Laravel adapter.
 
 Use to be able to share props based on the Inertia component name.
 
+[![Tests](https://github.com/ambengers/kinetic/actions/workflows/tests.yml/badge.svg)](https://github.com/ambengers/kinetic/actions/workflows/tests.yml)
+
 ## Versions
 
 | InertiaJS    | Kinetic |
