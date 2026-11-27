@@ -21,11 +21,15 @@ class Kinetic extends ResponseFactory
     }
 
     /**
+     * `$component` stays untyped on purpose: Inertia's ResponseFactory::render() takes
+     * the argument untyped, and narrowing it here makes PHP reject the override with
+     * a fatal error (inertia-laravel 3.8 and newer).
+     *
      * @param  string  $component
      * @param  array|Arrayable  $props
      * @return Response
      */
-    public function render(string $component, $props = []): Response
+    public function render($component, $props = []): Response
     {
         if ($props instanceof Arrayable) {
             $props = $props->toArray();
