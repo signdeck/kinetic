@@ -12,6 +12,7 @@ use Inertia\RenderContext;
 use Inertia\Response;
 use Inertia\ResponseFactory;
 use ReflectionMethod;
+use RuntimeException;
 use UnitEnum;
 
 class RenderComposedPropsTest extends BaseTestCase
@@ -87,6 +88,42 @@ class RenderComposedPropsTest extends BaseTestCase
         $page = $this->page(app(ResponseFactory::class)->render('User/Profile'));
 
         $this->assertSame(['foo' => 'bar'], $page['props']['list']);
+    }
+
+    public function test_composed_props_do_not_leak_into_the_next_render(): void
+    {
+        Inertia::composer('Index', static function (ResponseFactory $inertia): void {
+            $inertia->with('pageTitle', 'Index');
+        });
+
+        $factory = app(ResponseFactory::class);
+        $first = $this->page($factory->render('Index'));
+        $second = $this->page($factory->render('Error', ['status' => 404]));
+
+        $this->assertSame('Index', $first['props']['pageTitle']);
+        $this->assertArrayNotHasKey('pageTitle', $second['props']);
+    }
+
+    public function test_failed_render_does_not_leak_composed_props(): void
+    {
+        Inertia::composer('Broken', [
+            static function (ResponseFactory $inertia): void {
+                $inertia->with('pageTitle', 'Broken');
+            },
+            static function (): never {
+                throw new RuntimeException('Boom');
+            },
+        ]);
+
+        $factory = app(ResponseFactory::class);
+
+        try {
+            $factory->render('Broken');
+        } catch (RuntimeException) {
+            // Композер упал после того, как уже успел накопить проп.
+        }
+
+        $this->assertArrayNotHasKey('pageTitle', $this->page($factory->render('Error'))['props']);
     }
 
     /**

@@ -34,17 +34,24 @@ class Kinetic extends ResponseFactory
      */
     public function render($component, $props = []): Response
     {
-        $this->resolveComposedProps($this->componentName($component));
+        try {
+            $this->resolveComposedProps($this->componentName($component));
 
-        if ($props instanceof Arrayable) {
-            $props = $props->toArray();
-        } elseif ($props instanceof ProvidesInertiaProperties) {
-            // Resolved later by Inertia\PropsResolver: keep the provider first so that
-            // composed props win over its keys, exactly like over regular page props.
-            $props = [$props];
+            if ($props instanceof Arrayable) {
+                $props = $props->toArray();
+            } elseif ($props instanceof ProvidesInertiaProperties) {
+                // Resolved later by Inertia\PropsResolver: keep the provider first so that
+                // composed props win over its keys, exactly like over regular page props.
+                $props = [$props];
+            }
+
+            return parent::render($component, array_merge($props, $this->composedProps));
+        } finally {
+            // parent::render() copied the props into a new Response, so the accumulated
+            // ones are only needed for one render. Without this, a second render in the
+            // same request (e.g. an error page after a rendered page) inherits them.
+            $this->composedProps = [];
         }
-
-        return parent::render($component, array_merge($props, $this->composedProps));
     }
 
     /**
