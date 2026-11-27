@@ -2,9 +2,12 @@
 
 namespace Ambengers\Kinetic;
 
+use BackedEnum;
 use Illuminate\Contracts\Support\Arrayable;
+use Inertia\ProvidesInertiaProperties;
 use Inertia\Response;
 use Inertia\ResponseFactory;
+use UnitEnum;
 
 /**
  * @mixin \Inertia\ResponseFactory
@@ -22,22 +25,42 @@ class Kinetic extends ResponseFactory
 
     /**
      * `$component` stays untyped on purpose: Inertia's ResponseFactory::render() takes
-     * the argument untyped, and narrowing it here makes PHP reject the override with
-     * a fatal error (inertia-laravel 3.8 and newer).
+     * the argument untyped in some releases (3.8.0), and narrowing it here makes PHP
+     * reject the override with a fatal error.
      *
-     * @param  string  $component
-     * @param  array|Arrayable  $props
+     * @param  BackedEnum|UnitEnum|string  $component
+     * @param  array|Arrayable|ProvidesInertiaProperties  $props
      * @return Response
      */
     public function render($component, $props = []): Response
     {
+        $this->resolveComposedProps($this->componentName($component));
+
         if ($props instanceof Arrayable) {
             $props = $props->toArray();
+        } elseif ($props instanceof ProvidesInertiaProperties) {
+            // Resolved later by Inertia\PropsResolver: keep the provider first so that
+            // composed props win over its keys, exactly like over regular page props.
+            $props = [$props];
         }
 
-        $this->resolveComposedProps($component);
-
         return parent::render($component, array_merge($props, $this->composedProps));
+    }
+
+    /**
+     * The component name the client will see: `transformComponent()` plus enum
+     * normalization, both applied by ResponseFactory::render() afterwards.
+     */
+    protected function componentName($component): string
+    {
+        $component = $this->transformComponent($component) ?? $component;
+
+        return match (true) {
+            $component instanceof BackedEnum => (string) $component->value,
+            $component instanceof UnitEnum => $component->name,
+            is_string($component) => $component,
+            default => '',
+        };
     }
 
     /**

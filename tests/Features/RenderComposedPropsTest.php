@@ -4,10 +4,15 @@ namespace Ambengers\Kinetic\Tests\Features;
 
 use Ambengers\Kinetic\Kinetic;
 use Ambengers\Kinetic\Tests\BaseTestCase;
+use BackedEnum;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Inertia\ProvidesInertiaProperties;
+use Inertia\RenderContext;
+use Inertia\Response;
 use Inertia\ResponseFactory;
 use ReflectionMethod;
+use UnitEnum;
 
 class RenderComposedPropsTest extends BaseTestCase
 {
@@ -17,12 +22,10 @@ class RenderComposedPropsTest extends BaseTestCase
             $inertia->with('list', ['foo' => 'bar']);
         });
 
-        $response = app(ResponseFactory::class)->render('User/Profile', ['title' => 'Profile']);
+        $page = $this->page(app(ResponseFactory::class)->render('User/Profile', ['title' => 'Profile']));
 
-        $props = $this->props($response);
-
-        $this->assertSame('Profile', $props['title']);
-        $this->assertSame(['foo' => 'bar'], $props['list']);
+        $this->assertSame('Profile', $page['props']['title']);
+        $this->assertSame(['foo' => 'bar'], $page['props']['list']);
     }
 
     public function test_composed_props_override_page_props(): void
@@ -31,9 +34,59 @@ class RenderComposedPropsTest extends BaseTestCase
             $inertia->with('title', 'Composed');
         });
 
-        $response = app(ResponseFactory::class)->render('User/Profile', ['title' => 'Page']);
+        $page = $this->page(app(ResponseFactory::class)->render('User/Profile', ['title' => 'Page']));
 
-        $this->assertSame('Composed', $this->props($response)['title']);
+        $this->assertSame('Composed', $page['props']['title']);
+    }
+
+    public function test_backed_enum_component_resolves_composed_props(): void
+    {
+        Inertia::composer('User/Profile', static function (ResponseFactory $inertia): void {
+            $inertia->with('list', ['foo' => 'bar']);
+        });
+
+        $page = $this->page(app(ResponseFactory::class)->render(BackedComponent::UserProfile));
+
+        $this->assertSame('User/Profile', $page['component']);
+        $this->assertSame(['foo' => 'bar'], $page['props']['list']);
+    }
+
+    public function test_unit_enum_component_resolves_composed_props(): void
+    {
+        Inertia::composer('UserProfile', static function (ResponseFactory $inertia): void {
+            $inertia->with('list', ['foo' => 'bar']);
+        });
+
+        $page = $this->page(app(ResponseFactory::class)->render(UnitComponent::UserProfile));
+
+        $this->assertSame('UserProfile', $page['component']);
+        $this->assertSame(['foo' => 'bar'], $page['props']['list']);
+    }
+
+    public function test_provided_props_are_kept_and_composed_props_win(): void
+    {
+        Inertia::composer('User/Profile', static function (ResponseFactory $inertia): void {
+            $inertia->with('title', 'Composed');
+        });
+
+        $page = $this->page(app(ResponseFactory::class)->render('User/Profile', new UserPageProps));
+
+        $this->assertSame('Composed', $page['props']['title']);
+        $this->assertSame('provider', $page['props']['source']);
+    }
+
+    public function test_composers_match_the_transformed_component_name(): void
+    {
+        app(ResponseFactory::class)->transformComponentUsing(
+            static fn (string $component): string => strtolower($component)
+        );
+        Inertia::composer('user/profile', static function (ResponseFactory $inertia): void {
+            $inertia->with('list', ['foo' => 'bar']);
+        });
+
+        $page = $this->page(app(ResponseFactory::class)->render('User/Profile'));
+
+        $this->assertSame(['foo' => 'bar'], $page['props']['list']);
     }
 
     /**
@@ -55,10 +108,28 @@ class RenderComposedPropsTest extends BaseTestCase
         );
     }
 
-    private function props(\Inertia\Response $response): array
+    private function page(Response $response): array
     {
         $request = Request::create('/user/profile', server: ['HTTP_X_INERTIA' => 'true']);
 
-        return $response->toResponse($request)->getData(true)['props'];
+        return $response->toResponse($request)->getData(true);
+    }
+}
+
+enum BackedComponent: string
+{
+    case UserProfile = 'User/Profile';
+}
+
+enum UnitComponent
+{
+    case UserProfile;
+}
+
+class UserPageProps implements ProvidesInertiaProperties
+{
+    public function toInertiaProperties(RenderContext $context): iterable
+    {
+        return ['title' => 'Provider', 'source' => 'provider'];
     }
 }
