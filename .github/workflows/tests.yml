@@ -10,7 +10,7 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    name: PHP 8.4 (Inertia.js 3.x)
+    name: PHP 8.4 (Inertia.js >= 3.8)
 
     steps:
       - name: Checkout code
@@ -19,7 +19,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php }}
+          php-version: "8.4"
           extensions: dom, curl, libxml, mbstring, zip
           coverage: none
 

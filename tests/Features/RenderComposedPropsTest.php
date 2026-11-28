@@ -4,22 +4,22 @@ namespace Ambengers\Kinetic\Tests\Features;
 
 use Ambengers\Kinetic\Kinetic;
 use Ambengers\Kinetic\Tests\BaseTestCase;
-use BackedEnum;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\ProvidesInertiaProperties;
 use Inertia\RenderContext;
 use Inertia\Response;
 use Inertia\ResponseFactory;
+use InvalidArgumentException;
 use ReflectionMethod;
 use RuntimeException;
-use UnitEnum;
 
 class RenderComposedPropsTest extends BaseTestCase
 {
     public function test_composed_props_are_merged_into_the_rendered_page(): void
     {
-        Inertia::composer('User/Profile', static function (ResponseFactory $inertia): void {
+        Inertia::composer('User/Profile', static function (Kinetic $inertia): void {
             $inertia->with('list', ['foo' => 'bar']);
         });
 
@@ -31,7 +31,7 @@ class RenderComposedPropsTest extends BaseTestCase
 
     public function test_composed_props_override_page_props(): void
     {
-        Inertia::composer('User/Profile', static function (ResponseFactory $inertia): void {
+        Inertia::composer('User/Profile', static function (Kinetic $inertia): void {
             $inertia->with('title', 'Composed');
         });
 
@@ -42,7 +42,7 @@ class RenderComposedPropsTest extends BaseTestCase
 
     public function test_backed_enum_component_resolves_composed_props(): void
     {
-        Inertia::composer('User/Profile', static function (ResponseFactory $inertia): void {
+        Inertia::composer('User/Profile', static function (Kinetic $inertia): void {
             $inertia->with('list', ['foo' => 'bar']);
         });
 
@@ -54,7 +54,7 @@ class RenderComposedPropsTest extends BaseTestCase
 
     public function test_unit_enum_component_resolves_composed_props(): void
     {
-        Inertia::composer('UserProfile', static function (ResponseFactory $inertia): void {
+        Inertia::composer('UserProfile', static function (Kinetic $inertia): void {
             $inertia->with('list', ['foo' => 'bar']);
         });
 
@@ -66,7 +66,7 @@ class RenderComposedPropsTest extends BaseTestCase
 
     public function test_provided_props_are_kept_and_composed_props_win(): void
     {
-        Inertia::composer('User/Profile', static function (ResponseFactory $inertia): void {
+        Inertia::composer('User/Profile', static function (Kinetic $inertia): void {
             $inertia->with('title', 'Composed');
         });
 
@@ -81,18 +81,53 @@ class RenderComposedPropsTest extends BaseTestCase
         app(ResponseFactory::class)->transformComponentUsing(
             static fn (string $component): string => strtolower($component)
         );
-        Inertia::composer('user/profile', static function (ResponseFactory $inertia): void {
+        Inertia::composer('user/profile', static function (Kinetic $inertia): void {
             $inertia->with('list', ['foo' => 'bar']);
         });
 
         $page = $this->page(app(ResponseFactory::class)->render('User/Profile'));
 
+        $this->assertSame('user/profile', $page['component']);
         $this->assertSame(['foo' => 'bar'], $page['props']['list']);
+    }
+
+    public function test_component_transformer_runs_once(): void
+    {
+        $calls = 0;
+
+        app(ResponseFactory::class)->transformComponentUsing(
+            static function (string $component) use (&$calls): string {
+                $calls++;
+
+                return $component.'X';
+            }
+        );
+
+        $page = $this->page(app(ResponseFactory::class)->render('User/Profile'));
+
+        $this->assertSame(1, $calls);
+        $this->assertSame('User/ProfileX', $page['component']);
+    }
+
+    public function test_invalid_component_does_not_run_composers(): void
+    {
+        $ran = false;
+
+        Inertia::composer('*', static function () use (&$ran): void {
+            $ran = true;
+        });
+
+        try {
+            app(ResponseFactory::class)->render(IntComponent::Draft);
+            $this->fail('An int-backed enum is not a valid Inertia component.');
+        } catch (InvalidArgumentException) {
+            $this->assertFalse($ran);
+        }
     }
 
     public function test_composed_props_do_not_leak_into_the_next_render(): void
     {
-        Inertia::composer('Index', static function (ResponseFactory $inertia): void {
+        Inertia::composer('Index', static function (Kinetic $inertia): void {
             $inertia->with('pageTitle', 'Index');
         });
 
@@ -107,7 +142,7 @@ class RenderComposedPropsTest extends BaseTestCase
     public function test_failed_render_does_not_leak_composed_props(): void
     {
         Inertia::composer('Broken', [
-            static function (ResponseFactory $inertia): void {
+            static function (Kinetic $inertia): void {
                 $inertia->with('pageTitle', 'Broken');
             },
             static function (): never {
@@ -119,8 +154,9 @@ class RenderComposedPropsTest extends BaseTestCase
 
         try {
             $factory->render('Broken');
+            $this->fail('The failing composer should interrupt the render.');
         } catch (RuntimeException) {
-            // Композер упал после того, как уже успел накопить проп.
+            // The composer stored a prop, then threw.
         }
 
         $this->assertArrayNotHasKey('pageTitle', $this->page($factory->render('Error'))['props']);
@@ -148,8 +184,19 @@ class RenderComposedPropsTest extends BaseTestCase
     private function page(Response $response): array
     {
         $request = Request::create('/user/profile', server: ['HTTP_X_INERTIA' => 'true']);
+        $http = $response->toResponse($request);
 
-        return $response->toResponse($request)->getData(true);
+        if (! $http instanceof JsonResponse) {
+            throw new RuntimeException('Expected an Inertia JSON response.');
+        }
+
+        $page = $http->getData(true);
+
+        if (! is_array($page)) {
+            throw new RuntimeException('Expected an Inertia page array.');
+        }
+
+        return $page;
     }
 }
 
@@ -161,6 +208,11 @@ enum BackedComponent: string
 enum UnitComponent
 {
     case UserProfile;
+}
+
+enum IntComponent: int
+{
+    case Draft = 1;
 }
 
 class UserPageProps implements ProvidesInertiaProperties

@@ -7,6 +7,7 @@ use Illuminate\Contracts\Support\Arrayable;
 use Inertia\ProvidesInertiaProperties;
 use Inertia\Response;
 use Inertia\ResponseFactory;
+use InvalidArgumentException;
 use UnitEnum;
 
 /**
@@ -35,7 +36,13 @@ class Kinetic extends ResponseFactory
     public function render($component, $props = []): Response
     {
         try {
-            $this->resolveComposedProps($this->componentName($component));
+            $component = $this->componentName($component);
+
+            if (! is_string($component)) {
+                throw new InvalidArgumentException('Component argument must be of type string or a string BackedEnum');
+            }
+
+            $this->resolveComposedProps($component);
 
             if ($props instanceof Arrayable) {
                 $props = $props->toArray();
@@ -45,7 +52,16 @@ class Kinetic extends ResponseFactory
                 $props = [$props];
             }
 
-            return parent::render($component, array_merge($props, $this->composedProps));
+            // componentName() already applied the transformer. Suspend it so
+            // parent::render() does not apply it a second time.
+            $transformer = $this->componentTransformer;
+            $this->componentTransformer = null;
+
+            try {
+                return parent::render($component, array_merge($props, $this->composedProps));
+            } finally {
+                $this->componentTransformer = $transformer;
+            }
         } finally {
             // parent::render() copied the props into a new Response, so the accumulated
             // ones are only needed for one render. Without this, a second render in the
@@ -55,18 +71,17 @@ class Kinetic extends ResponseFactory
     }
 
     /**
-     * The component name the client will see: `transformComponent()` plus enum
-     * normalization, both applied by ResponseFactory::render() afterwards.
+     * Mirror ResponseFactory::render(): transform the component, then resolve an
+     * enum to the name the client sees.
      */
-    protected function componentName($component): string
+    protected function componentName(mixed $component): mixed
     {
-        $component = $this->transformComponent($component) ?? $component;
+        $component = $this->transformComponent($component);
 
         return match (true) {
-            $component instanceof BackedEnum => (string) $component->value,
+            $component instanceof BackedEnum => $component->value,
             $component instanceof UnitEnum => $component->name,
-            is_string($component) => $component,
-            default => '',
+            default => $component,
         };
     }
 
